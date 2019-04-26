@@ -3,8 +3,8 @@ from pyclick.humancurve import HumanCurve
 from sys import path
 from time import sleep
 from json import dumps
-from random import uniform, randint
-from selenium import webdriver
+from random import uniform, randint, choice
+from seleniumwire import webdriver
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.remote.webdriver import WebDriver
@@ -68,9 +68,15 @@ def open_chrome(useragent=None, *kwargs):
         useragent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) ' \
                     'Chrome/73.0.3683.75 Safari/537.36'
 
+    # Set browser agent, disable webdriver notice.
     options = Options()
     options.add_argument(f'user-agent={useragent}')
     options.add_argument("disable-infobars")
+
+    # Enable disk caching, disable some features. (https://github.com/dinuduke/Selenium-chrome-firefox-tips)
+    prefs = {'disk-cache-size': 4096,
+             "profile.managed_default_content_settings.geolocation": 2}
+    options.add_experimental_option('prefs', prefs)
 
     for arg in kwargs:
         options.add_argument(arg)
@@ -81,7 +87,14 @@ def open_chrome(useragent=None, *kwargs):
     global chrome_window
     chrome_window = webdriver.Chrome(executable_path=path[0]+'/chromedriver', chrome_options=options)
 
-    webgl_ = ['NVIDIA Corporation', 'Intel Open Source Technology Center' ]
+    # Randomise webgl vendor and renderer.
+    webgl = {'NVIDIA Corporation': 'GeForce GTX 1070/PCIe/SSE2',
+              'NVIDIA Corporation': 'GeForce GTX 1060/PCIe/SSE2',
+              'NVIDIA Corporation': 'GeForce GTX 1050/PCIe/SSE2',
+              'Intel Open Source Technology Center': 'Mesa DRI Intel(R) Ivybridge Mobile '}
+
+    webgl_vendor, webgl_renderer = choice(list(webgl.items()))
+
     # Preload script to avoid detection, mostly taken from https://intoli.com/blog/making-chrome-headless-undetectable/
     # Line 126 to update broken image size if chrome updates this.
     chrome_window.add_script("""
@@ -104,11 +117,11 @@ const getParameter = WebGLRenderingContext.getParameter;
 WebGLRenderingContext.prototype.getParameter = function(parameter) {
   // UNMASKED_VENDOR_WEBGL
   if (parameter === 37445) {
-    return 'Intel Open Source Technology Center';
+    return '%s';
   }
   // UNMASKED_RENDERER_WEBGL
   if (parameter === 37446) {
-    return 'Mesa DRI Intel(R) Ivybridge Mobile ';
+    return '%s';
   }
 
   return getParameter(parameter);
@@ -135,17 +148,26 @@ WebGLRenderingContext.prototype.getParameter = function(parameter) {
 if (window.self === window.top) { // if main document
     console.log('add script');
 }
-  """)
+  """ % (webgl_vendor, webgl_renderer))
+
+    #chrome_window.get('https://intoli.com/blog/making-chrome-headless-undetectable/chrome-headless-test.html')
 
     return 0
 
 
-def login_discord(email, password, speed=3):
+def login_discord(email, password, speed=5):
+    # Random int decides behaviour pattern.
+    percentage = randint(0, 100)
 
     open_chrome()
 
     # Open Discord.
-    chrome_window.get("https://discordapp.com/channels/@me")
+    if percentage >= 50:
+        chrome_window.get("https://discordapp.com/login")
+    elif percentage >= 30:
+        chrome_window.get("https://discordapp.com/channels/@me")
+    else:
+        chrome_window.get("https://discordapp.com/channels/")
 
     # Find our inputs and buttons via xpath.
     email_input = chrome_window.find_element_by_xpath('//*[@id="app-mount"]/div[1]/div/div[2]/div/form/'
@@ -155,15 +177,12 @@ def login_discord(email, password, speed=3):
     login_button = chrome_window.find_element_by_xpath('//*[@id="app-mount"]/div[1]/div/div[2]/div/form/'
                                                        'div/div[3]/button[2]')
 
-    # Random int decides behaviour pattern.
-    percentage = randint(0, 100)
-
     # Determine typing speed
     if speed > 5:
         logging.warning("Action speed set above 5, may cause bot-detection and reliability issues.")
 
-    min_delay = 0.25 / speed
-    max_delay = 2 / speed
+    min_delay = 0.15 / speed
+    max_delay = 1.5 / speed
 
     # Random sleeps between inputing username and password
     sleep(uniform(min_delay, max_delay))
@@ -181,8 +200,8 @@ def login_discord(email, password, speed=3):
         login_button.click()
 
     # Blocks Discord analytics using DevTool API.
-    send_devtool_cmd(chrome_window, "Network.setBlockedURLs", {'urls': ["https://discordapp.com/api/v6/science"]})
-    send_devtool_cmd(chrome_window, "Network.enable")
+    #send_devtool_cmd(chrome_window, "Network.setBlockedURLs", {'urls': ["https://discordapp.com/api/v6/science"]})
+    #send_devtool_cmd(chrome_window, "Network.enable")
 
 
 def scrape_discord_servers(driver):
@@ -200,4 +219,4 @@ def scrape_startpage(search_terms, proxies=None):
         pass
 
 
-login_discord("","")
+login_discord("", "")
